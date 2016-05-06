@@ -1,28 +1,30 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+﻿using System.Windows;
+using Microsoft.Azure;
 
 namespace AzurePlayground
 {
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
-    public partial class MainWindow : Window
+    public partial class MainWindow
     {
+        private KeyVaultPlayground _keyVaultPlayground;
+
         public MainWindow()
         {
             InitializeComponent();
+
+            _keyVaultPlayground = new KeyVaultPlayground();
+        }
+
+        private void CreateOrUpdateKeyVaultClick(object sender, RoutedEventArgs e)
+        {
+            _keyVaultPlayground.CreateOrUpdateKeyVault();
+        }
+
+        private void CreateSecretClick(object sender, RoutedEventArgs e)
+        {
+            _keyVaultPlayground.CreateSecret();
         }
     }
 }

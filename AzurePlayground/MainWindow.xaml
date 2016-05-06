@@ -8,7 +8,20 @@
         Title="Azure Playgound" 
         Height="350" 
         Width="525">
+    <Window.Resources>
+        <ResourceDictionary>
+            <Style TargetType="{x:Type Button}">
+                <Setter Property="Margin" Value="5"/>
+                <Setter Property="Padding" Value="3"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
     <Grid>
-        
+        <WrapPanel 
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center">
+            <Button Click="CreateOrUpdateKeyVaultClick">Create Key Vault</Button>
+            <Button Click="CreateSecretClick">Add Secret</Button>
+        </WrapPanel>
     </Grid>
 </Window>
