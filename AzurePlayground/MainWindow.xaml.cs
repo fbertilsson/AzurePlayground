@@ -1,5 +1,5 @@
-﻿using System.Windows;
-using Microsoft.Azure;
+﻿using System;
+using System.Windows;
 
 namespace AzurePlayground
 {
@@ -24,7 +24,14 @@ namespace AzurePlayground
 
         private void CreateSecretClick(object sender, RoutedEventArgs e)
         {
-            _keyVaultPlayground.CreateSecret();
+            try
+            {
+                _keyVaultPlayground.CreateSecret();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+            }
         }
     }
 }

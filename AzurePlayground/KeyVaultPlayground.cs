@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Azure.KeyVault;
 using Microsoft.Azure.Management.KeyVault;
@@ -23,7 +24,10 @@ namespace AzurePlayground
             _deploymentAppClientId = new Guid("4c28008e-b19b-4f05-93d2-56cc5194c294");
             _clientId = _deploymentAppClientId;
             _tenantId = new Guid("059c5599-663c-491c-b6ea-844c241fc531");
-            _userCredential = new UserCredential("admin@sb1vptest.onmicrosoft.com", "");
+
+            var password = File.ReadAllText("ignore");
+            _userCredential = new UserCredential("admin@sb1vptest.onmicrosoft.com", password);
+
             _vaultName = "vp-vault-test";
             _resourceGroupName = "vp-resgroup-test";
 
@@ -73,7 +77,7 @@ namespace AzurePlayground
             //}
         }
 
-        public void CreateSecret() { 
+        public Secret CreateSecret() { 
             var vaultClient = new KeyVaultClient((authority, resource, scope) =>
             {
                 //var credential = new ClientCredential(_clientId, applicationSecret);
@@ -85,24 +89,19 @@ namespace AzurePlayground
                 return Task.FromResult(_authenticationResult.AccessToken);
             });
 
-            var secretName = "fb-testing3";
+            var secretName = "fb-testing4";
             //var idHelper = new KeyVaultIdentifierHelper(result.Vault.Properties.VaultUri);
             //var secretUri = idHelper.GetSecretIdentifier(secretName);
             var vaultUri = "https://vp-vault-test.vault.azure.net/";
             var secretUri = $"{vaultUri}secrets/{secretName}";
-            try
-            {
-                // Does the _application_ need to be authorized to do this? Is that why it fails with "Bad request"?
-                var secret = vaultClient.SetSecretAsync(
-                    vaultUri,
-                    secretUri,
-                    "very secret").ConfigureAwait(false);
-                Console.WriteLine(secret);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e);
-            }
+          
+            // Does the _application_ need to be authorized to do this? Is that why it fails with "Bad request"?
+            var secretResult = vaultClient.SetSecretAsync(
+                vaultUri,
+                secretUri,
+                "very secret");
+
+            return secretResult.Result;
         }
 
         private IList<AccessPolicyEntry> GetAccessPolicies(Guid deployAppClientId)
