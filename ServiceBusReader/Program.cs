@@ -17,8 +17,10 @@ namespace ServiceBusReader
     class Program
     {
         private readonly string _topicName;
-        private readonly string _subscriptionName;
-        private SubscriptionClient _subscriptionClient;
+        private readonly string _subscriptionName1;
+        private readonly string _subscriptionName2;
+        private SubscriptionClient _subscriptionClient1;
+        private SubscriptionClient _subscriptionClient2;
         private int _einsteinFailureCount;
 
         /// <summary>
@@ -50,29 +52,37 @@ namespace ServiceBusReader
         public Program()
         {
             _topicName = ConfigurationManager.AppSettings["TopicName"];
-            _subscriptionName = ConfigurationManager.AppSettings["SubscriptionName"];
+            _subscriptionName1 = ConfigurationManager.AppSettings["SubscriptionName1"];
+            _subscriptionName2 = ConfigurationManager.AppSettings["SubscriptionName2"];
         }
 
         public async Task Run(string connectionString, CancellationTokenSource cts)
         {
             var sendTask = SendMessagesAsync(connectionString, _topicName);
-            var receiveTask = ReceiveMessagesAsync(connectionString, _topicName, _subscriptionName, cts.Token);
+
+            var retryPolicy = new RetryExponential(TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(5), 6);
+            _subscriptionClient1 = new SubscriptionClient(connectionString, _topicName, _subscriptionName1, retryPolicy: retryPolicy);
+            _subscriptionClient2 = new SubscriptionClient(connectionString, _topicName, _subscriptionName2, retryPolicy: retryPolicy);
+
+
+            ReceiveMessagesAsync(_subscriptionClient1, ProcessMessages1Async, cts.Token);
+            ReceiveMessagesAsync(_subscriptionClient2, ProcessMessages2Async, cts.Token);
 
             await Task.WhenAll(
                 Task.WhenAny(
                     Task.Run(Console.ReadKey, cts.Token),
                     Task.Delay(TimeSpan.FromSeconds(10), cts.Token)
                 ).ContinueWith((t) => cts.Cancel(), cts.Token),
-                sendTask,
-                receiveTask);
+                sendTask
+                //receiveTask1,
+                //receiveTask2
+                );
         }
 
         async Task SendMessagesAsync(string connectionString, string topicName)
         {
             var topicClient = new TopicClient(connectionString, topicName);
-
-            //var sender = new MessageSender(connectionString, topicName);
-
+            
             dynamic data = new[]
             {
                 new {name = "Einstein", firstName = "Albert"},
@@ -96,31 +106,29 @@ namespace ServiceBusReader
                     MessageId = i.ToString(),
                     TimeToLive = TimeSpan.FromMinutes(2)
                 };
-                message.UserProperties.Add("destination", "pande");
+                var destination = i % 2 == 0 ? "pande" : "preview";
+                message.UserProperties.Add("destination", destination);
 
                 await topicClient.SendAsync(message);
                 lock (Console.Out)
                 {
                     Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine("Message sent: Id = {0}, {1}", message.MessageId, data[i].name);
+                    Console.WriteLine("Message sent: Id = {0}, {1}, dest: {2}", message.MessageId, data[i].name, destination);
                     Console.ResetColor();
                 }
             }
         }
 
-        async Task ReceiveMessagesAsync(string connectionString, string topicName, string subscriptionName,
+        private void ReceiveMessagesAsync(SubscriptionClient subscriptionClient,
+            Func<Message, CancellationToken, Task> messageCallback,
             CancellationToken cancellationToken)
         {
-            var retryPolicy = new RetryExponential(TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(5), 6);
-            _subscriptionClient = new SubscriptionClient(connectionString, topicName, subscriptionName, retryPolicy: retryPolicy);
-
-
             var doneReceiving = new TaskCompletionSource<bool>();
             // close the receiver and factory when the CancellationToken fires 
             cancellationToken.Register(
                 async () =>
                 {
-                    await _subscriptionClient.CloseAsync();
+                    await subscriptionClient.CloseAsync();
                     doneReceiving.SetResult(true);
                 });
 
@@ -137,11 +145,7 @@ namespace ServiceBusReader
             };
 
             // Register the function that processes messages.
-            _subscriptionClient.RegisterMessageHandler(ProcessMessagesAsync, messageHandlerOptions);
-
-            Console.ReadKey();
-
-            await _subscriptionClient.CloseAsync();
+            subscriptionClient.RegisterMessageHandler(messageCallback, messageHandlerOptions);
         }
 
         // Use this handler to examine the exceptions received on the message pump.
@@ -158,7 +162,17 @@ namespace ServiceBusReader
             return Task.CompletedTask;
         }
 
-        async Task ProcessMessagesAsync(Message message, CancellationToken token)
+        async Task ProcessMessages1Async(Message message, CancellationToken token)
+        {
+            await ProcessMessagesAsync("1", _subscriptionClient1, message, token);
+        }
+
+        async Task ProcessMessages2Async(Message message, CancellationToken token)
+        {
+            await ProcessMessagesAsync("2", _subscriptionClient2, message, token);
+        }
+
+        async Task ProcessMessagesAsync(string subscriptionName, SubscriptionClient subscriptionClient, Message message, CancellationToken token)
         {
             // Process the message.
             var body = Encoding.UTF8.GetString(message.Body);
@@ -168,16 +182,16 @@ namespace ServiceBusReader
                 if (++_einsteinFailureCount < 4)
                 {
                     Console.ForegroundColor = ConsoleColor.DarkRed;
-                    Console.WriteLine("Failing Einstein");
+                    Console.WriteLine($"{subscriptionName}: Failing Einstein");
                     Console.ResetColor();
                     throw new Exception("Failing Einstein");
                 }
             }
-            Console.WriteLine($"Received message: SequenceNumber:{message.SystemProperties.SequenceNumber} Body:{body}");
+            Console.WriteLine($"{subscriptionName}: Received message: SequenceNumber:{message.SystemProperties.SequenceNumber} Body:{body}");
 
             // Complete the message so that it is not received again.
             // This can be done only if the subscriptionClient is created in ReceiveMode.PeekLock mode (which is the default).
-            await _subscriptionClient.CompleteAsync(message.SystemProperties.LockToken);
+            await subscriptionClient.CompleteAsync(message.SystemProperties.LockToken);
 
             // Note: Use the cancellationToken passed as necessary to determine if the subscriptionClient has already been closed.
             // If subscriptionClient has already been closed, you can choose to not call CompleteAsync() or AbandonAsync() etc.
