@@ -96,6 +96,7 @@ namespace ServiceBusReader
                     MessageId = i.ToString(),
                     TimeToLive = TimeSpan.FromMinutes(2)
                 };
+                message.UserProperties.Add("destination", "pande");
 
                 await topicClient.SendAsync(message);
                 lock (Console.Out)
@@ -112,6 +113,7 @@ namespace ServiceBusReader
         {
             var retryPolicy = new RetryExponential(TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(5), 6);
             _subscriptionClient = new SubscriptionClient(connectionString, topicName, subscriptionName, retryPolicy: retryPolicy);
+
 
             var doneReceiving = new TaskCompletionSource<bool>();
             // close the receiver and factory when the CancellationToken fires 
